@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Catapult Panic</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 960px;
+            height: 540px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            border-radius: 16px;
+            overflow: hidden;
+            background: #1e293b;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+            z-index: 30;
+        }
+
+        /* Fixed Leaderboard Modal Z-Index so it appears above Game Over */
+        #leaderboard-overlay {
+            z-index: 50;
+        }
+
+        .modal {
+            background: #1e293b;
+            border: 3px solid #38bdf8;
+            border-radius: 24px;
+            padding: 24px 32px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 480px;
+            width: 90%;
+            transform: scale(0.9);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-title {
+            font-size: 2.2rem;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+        }
+
+        /* Inputs & Leaderboard Styles */
+        .username-input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 2px solid #38bdf8;
+            background: #0f172a;
+            color: #f8fafc;
+            font-size: 1.2rem;
+            text-align: center;
+            outline: none;
+        }
+
+        .username-input:focus {
+            border-color: #facc15;
+            box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+        }
+
+        .leaderboard-list {
+            width: 100%;
+            max-height: 180px;
+            overflow-y: auto;
+            background: #0f172a;
+            border-radius: 12px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 12px;
+            background: #1e293b;
+            border-radius: 8px;
+            font-size: 1rem;
+            color: #f8fafc;
+        }
+
+        .leaderboard-item:nth-child(1) { color: #facc15; font-weight: bold; }
+        .leaderboard-item:nth-child(2) { color: #94a3b8; font-weight: bold; }
+        .leaderboard-item:nth-child(3) { color: #b45309; font-weight: bold; }
+
+        .btn-group {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+            border: none;
+            border-bottom: 4px solid #0369a1;
+            color: white;
+            padding: 14px 24px;
+            font-size: 1.5rem;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            flex: 1;
+            min-width: 140px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+
+        .btn:active {
+            transform: translateY(2px);
+            border-bottom-width: 2px;
+        }
+
+        .btn-ad {
+            background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%);
+            border-color: #6b21a8;
+        }
+
+        .btn-green {
+            background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+            border-color: #166534;
+        }
+
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            width: 100%;
+        }
+
+        .shop-item {
+            background: #334155;
+            border: 2px solid #475569;
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .shop-item-icon {
+            font-size: 2.2rem;
+        }
+
+        /* Controls Hint Overlay on Screen */
+        .touch-controls {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .ctrl-btn {
+            width: 54px;
+            height: 54px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(4px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            color: white;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        
+        .ctrl-btn:active {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Responsive scaling */
+        @media (max-width: 980px) {
+            #game-container {
+                width: 100vw;
+                height: 56.25vw;
+                max-height: 100vh;
+                border-radius: 0;
+            }
+        }
+
+        /* Ad Video Overlay Simulator */
+        #ad-modal-overlay {
+            z-index: 60;
+            background: rgba(0, 0, 0, 0.95);
+        }
+
+        .ad-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            background: radial-gradient(circle, #334155 0%, #0f172a 100%);
+        }
+
+        .ad-timer-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 2px solid #38bdf8;
+            color: #f8fafc;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .ad-timer-btn.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            border-color: #64748b;
+        }
+
+        .ad-content {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .ad-icon {
+            font-size: 5rem;
+            animation: bounce 1s infinite alternate;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-15px); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="960" height="540"></canvas>
+
+        <!-- Touch Controls for Mobile/Accessibility -->
+        <div class="touch-controls">
+            <div class="ctrl-btn" id="btn-left">⬅️</div>
+            <div class="ctrl-btn" id="btn-right">➡️</div>
+        </div>
+
+        <!-- Start / Pseudo Menu Overlay -->
+        <div id="start-overlay" class="overlay active">
+            <div class="modal">
+                <div class="modal-title">🏰 CATAPULT PANIC</div>
+                <input type="text" id="username-input" class="username-input" placeholder="👤 PSEUDO..." maxlength="12">
+                <div class="btn-group">
+                    <button class="btn btn-green" id="btn-start">▶️</button>
+                    <button class="btn" id="btn-show-lb">🏆</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Leaderboard Modal -->
+        <div id="leaderboard-overlay" class="overlay">
+            <div class="modal">
+                <div class="modal-title">🏆 LEADERBOARD</div>
+                <div id="leaderboard-list" class="leaderboard-list"></div>
+                <button class="btn" id="close-lb">❌</button>
+            </div>
+        </div>
+
+        <!-- Shop Modal -->
+        <div id="shop-overlay" class="overlay">
+            <div class="modal">
+                <div class="modal-title">🛒</div>
+                <div class="shop-grid">
+                    <div class="shop-item">
+                        <span class="shop-item-icon">💖</span>
+                        <button class="btn btn-green" id="buy-hp">🪙 500</button>
+                    </div>
+                    <div class="shop-item">
+                        <span class="shop-item-icon">⚡</span>
+                        <button class="btn btn-green" id="buy-burst">🪙 300</button>
+                    </div>
+                    <div class="shop-item">
+                        <span class="shop-item-icon">🔱</span>
+                        <button class="btn btn-green" id="buy-multi">🪙 400</button>
+                    </div>
+                    <div class="shop-item">
+                        <span class="shop-item-icon">🛡️</span>
+                        <button class="btn btn-green" id="buy-shield">🪙 250</button>
+                    </div>
+                </div>
+                <button class="btn" id="close-shop">❌</button>
+            </div>
+        </div>
+
+        <!-- Game Over Modal -->
+        <div id="gameover-overlay" class="overlay">
+            <div class="modal">
+                <div class="modal-title">💀</div>
+                <div style="font-size: 2.5rem; font-weight: bold; color: #facc15;" id="final-score">🪙 0</div>
+                <div class="btn-group">
+                    <button class="btn" id="btn-restart">🔄</button>
+                    <button class="btn" id="btn-home">🏠</button>
+                    <button class="btn" id="btn-go-lb">🏆</button>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-ad" id="btn-ad-hp">🎬 +1 💖</button>
+                    <button class="btn btn-ad" id="btn-ad-coins">🎬 +🪙500</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ad Video Popup Overlay -->
+        <div id="ad-modal-overlay" class="overlay">
+            <div class="ad-container">
+                <button id="ad-skip-btn" class="ad-timer-btn disabled">⏳ 5s</button>
+                <div class="ad-content">
+                    <div id="ad-icon" class="ad-icon">📺</div>
+                    <div style="font-size: 1.8rem; font-weight: bold; color: #facc15;">SPONSORED AD</div>
+                    <div style="color: #94a3b8; font-size: 1.1rem;">Reward loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Catapult Panic - 60FPS Optimized Canvas Game Engine
+         */
+
+        // --- CONSTANTS & CONFIG ---
+        const CANVAS_WIDTH = 960;
+        const CANVAS_HEIGHT = 540;
+        const GROUND_Y = 480;
+
+        // Sound Synthesis Engine (Web Audio API - Textless & Assetless)
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            playTone(freq, type, duration, startVol = 0.1, endVol = 0) {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(startVol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(Math.max(endVol, 0.0001), this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {}
+            }
+            catch() { this.playTone(600, 'sine', 0.1, 0.15); }
+            launch() { this.playTone(300, 'triangle', 0.15, 0.2); }
+            bounce() { this.playTone(150, 'sine', 0.08, 0.1); }
+            hit() { this.playTone(120, 'square', 0.2, 0.25); }
+            explosion() { this.playTone(60, 'sawtooth', 0.4, 0.3); }
+            powerup() { this.playTone(800, 'sine', 0.25, 0.2); }
+        }
+
+        const sound = new SoundEngine();
+
+        // --- OBJECT POOLS & STATE ---
+        const state = {
+            username: 'Player',
+            score: 0,
+            coins: 0,
+            combo: 1, // Multiplicateur de combo
+            maxCombo: 1,
+            hp: 3,
+            maxHp: 3,
+            ammoQueue: ['🍎', '🍌', '🍎'], // Queue to store harvested fruits
+            gameOver: false,
+            gameStarted: false,
+            paused: false,
+            powerup: null, // Legacy reference for simple checks
+            powerups: {    // Stackable active power-up timers (720 frames = 12s)
+                BURST: 0,
+                MULTI: 0,
+                SHIELD: 0,
+                MAGNET: 0
+            },
+            shake: 0,
+            bossHp: 100,
+            bossMaxHp: 100,
+            bossDirection: 1,
+            bossX: CANVAS_WIDTH / 2,
+            gameTime: 0, // Game survival time for progressive difficulty
+            usedAdLife: false, // Track if +1 HP ad was already used this run
+            usedAdCoins: false // Track if +500 Coins ad was already used this run
+        };
+
+        // Inputs
+        const keys = { left: false, right: false };
+        const mouse = { x: 0, y: 0, isDragging: false, startX: 0, startY: 0 };
+
+        // Entities
+        let catapult;
+        let projectiles = [];
+        let fallingItems = [];
+        let particles = [];
+        let floatingTexts = [];
+        let lastItemSpawn = 0; // Fix: Déclaration globale de lastItemSpawn
+        let currentShotHit = false; // Tracks if the current shot wave hit the monster
+
+        // Pool limits for high performance
+        const MAX_PROJECTILES = 40;
+        const MAX_ITEMS = 25;
+        const MAX_PARTICLES = 100;
+
+        // --- LEADERBOARD LOGIC ---
+        function getLeaderboard() {
+            try {
+                return JSON.parse(localStorage.getItem('catapult_panic_lb')) || [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveScore(name, score) {
+            if (!name || score <= 0) return;
+            const lb = getLeaderboard();
+            lb.push({ name: name.trim().substring(0, 12), score: score });
+            lb.sort((a, b) => b.score - a.score);
+            const topLB = lb.slice(0, 10);
+            try {
+                localStorage.setItem('catapult_panic_lb', JSON.stringify(topLB));
+            } catch (e) {}
+        }
+
+        function renderLeaderboard() {
+            const listContainer = document.getElementById('leaderboard-list');
+            const lb = getLeaderboard();
+            if (lb.length === 0) {
+                listContainer.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 20px;">🏆 --- </div>';
+                return;
+            }
+            listContainer.innerHTML = lb.map((entry, index) => `
+                <div class="leaderboard-item">
+                    <span>#${index + 1} ${entry.name}</span>
+                    <span>🪙 ${entry.score}</span>
+                </div>
+            `).join('');
+        }
+
+        // --- HELPER CLASSES ---
+        class Particle {
+            constructor() { this.active = false; }
+            spawn(x, y, color, size, vx, vy, life) {
+                this.x = x; this.y = y;
+                this.color = color; this.size = size;
+                this.vx = vx; this.vy = vy;
+                this.life = life; this.maxLife = life;
+                this.active = true;
+            }
+            update() {
+                if (!this.active) return;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life--;
+                if (this.life <= 0) this.active = false;
+            }
+            draw(ctx) {
+                if (!this.active) return;
+                ctx.save();
+                ctx.globalAlpha = this.life / this.maxLife;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class FloatingText {
+            constructor() { this.active = false; }
+            spawn(x, y, text, color = '#ffffff') {
+                this.x = x; this.y = y;
+                this.text = text;
+                this.color = color;
+                this.life = 40;
+                this.active = true;
+            }
+            update() {
+                if (!this.active) return;
+                this.y -= 1;
+                this.life--;
+                if (this.life <= 0) this.active = false;
+            }
+            draw(ctx) {
+                if (!this.active) return;
+                ctx.save();
+                ctx.globalAlpha = this.life / 40;
+                ctx.font = 'bold 22px system-ui';
+                ctx.fillStyle = this.color;
+                ctx.textAlign = 'center';
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        class FallingItem {
+            constructor() { this.active = false; }
+            spawn(x, type) {
+                this.x = x;
+                this.y = -30;
+                this.type = type;
+                this.vy = 2 + Math.random() * 2;
+                this.vx = (Math.random() - 0.5) * 1.5;
+                this.radius = 20;
+                this.active = true;
+                this.symbol = this.getSymbol(type);
+            }
+            getSymbol(type) {
+                switch(type) {
+                    case 'FRUIT_APPLE': return '🍎';
+                    case 'FRUIT_BANANA': return '🍌';
+                    case 'FRUIT_MELON': return '🍉';
+                    case 'BOMB': return '💣';
+                    case 'PWR_BURST': return '⚡';
+                    case 'PWR_MULTI': return '🔱';
+                    case 'PWR_SHIELD': return '🛡️';
+                    case 'PWR_MAGNET': return '🧲';
+                    default: return '🍎';
+                }
+            }
+            update() {
+                if (!this.active) return;
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Magnet effect towards Catapult (checks stackable magnet timer)
+                if (state.powerups.MAGNET > 0 && this.type !== 'BOMB') {
+                    const dx = catapult.x - this.x;
+                    const dy = catapult.y - this.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 250) {
+                        this.vx += (dx / dist) * 0.5;
+                        this.vy += (dy / dist) * 0.5;
+                    }
+                }
+
+                // Bounce walls
+                if (this.x < 20 || this.x > CANVAS_WIDTH - 20) this.vx *= -1;
+
+                // Hit Ground (item disappears without penalty)
+                if (this.y > GROUND_Y + 10) {
+                    this.active = false;
+                }
+            }
+            draw(ctx) {
+                if (!this.active) return;
+                ctx.font = '28px serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.symbol, this.x, this.y);
+            }
+        }
+
+        class Projectile {
+            constructor() { this.active = false; }
+            spawn(x, y, vx, vy, symbol = '🍎', shotId = 0) {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.radius = 16;
+                this.symbol = symbol;
+                this.bounces = 0;
+                this.shotId = shotId; // Unique identifier for the shot wave
+                this.active = true;
+            }
+            update() {
+                if (!this.active) return;
+
+                // Apply Gravity & Velocity
+                this.vy += 0.25;
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Wall Rebounds (Left / Right)
+                if (this.x - this.radius <= 0) {
+                    this.x = this.radius;
+                    this.vx *= -0.85;
+                    sound.bounce();
+                    spawnParticles(this.x, this.y, '#38bdf8', 5);
+                } else if (this.x + this.radius >= CANVAS_WIDTH) {
+                    this.x = CANVAS_WIDTH - this.radius;
+                    this.vx *= -0.85;
+                    sound.bounce();
+                    spawnParticles(this.x, this.y, '#38bdf8', 5);
+                }
+
+                // Hit Ground Boundary - Destroys Projectile & checks if shot missed
+                if (this.y + this.radius >= GROUND_Y) {
+                    this.active = false;
+                    spawnParticles(this.x, GROUND_Y, '#94a3b8', 8);
+                    
+                    // Reset combo ONLY if no projectile from the active shot wave hit the monster
+                    // and no other active projectiles belong to the same shot
+                    const otherActiveSameShot = projectiles.some(p => p.active && p.shotId === this.shotId);
+                    if (!currentShotHit && !otherActiveSameShot && state.combo > 1) {
+                        spawnFloatingText(this.x, GROUND_Y - 20, '❌ COMBO RESET', '#ef4444');
+                        state.combo = 1;
+                    }
+                }
+            }
+            draw(ctx) {
+                if (!this.active) return;
+                ctx.font = '24px serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.symbol, this.x, this.y);
+            }
+        }
+
+        class Catapult {
+            constructor() {
+                this.x = CANVAS_WIDTH / 2;
+                this.y = GROUND_Y - 15;
+                this.width = 70;
+                this.height = 35;
+                this.speed = 4.5; // Vitesse de la catapulte réduite (au lieu de 7)
+            }
+            update() {
+                if (keys.left) this.x -= this.speed;
+                if (keys.right) this.x += this.speed;
+
+                // Clamp to screen bounds
+                this.x = Math.max(this.width / 2, Math.min(CANVAS_WIDTH - this.width / 2, this.x));
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Shield Aura Visual (checks stackable shield timer)
+                if (state.powerups.SHIELD > 0) {
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 45, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Base / Wheels
+                ctx.fillStyle = '#64748b';
+                ctx.beginPath();
+                ctx.arc(-20, 15, 10, 0, Math.PI * 2);
+                ctx.arc(20, 15, 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Body Frame
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(-this.width / 2, -5, this.width, 20);
+
+                // Cup / Launcher Arm
+                ctx.fillStyle = '#b45309';
+                ctx.fillRect(-6, -25, 12, 25);
+                ctx.beginPath();
+                ctx.arc(0, -25, 16, Math.PI, 0);
+                ctx.fill();
+
+                // Next Loaded Item Display
+                if (state.ammoQueue.length > 0) {
+                    ctx.font = '20px serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    let loadedSymbol = state.ammoQueue[0];
+                    if (state.powerups.BURST > 0) loadedSymbol = '⚡';
+                    if (state.powerups.MULTI > 0) loadedSymbol = '🔱';
+                    ctx.fillText(loadedSymbol, 0, -28);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // --- POOL INITIALIZATION ---
+        function initPools() {
+            particles = Array.from({ length: MAX_PARTICLES }, () => new Particle());
+            floatingTexts = Array.from({ length: 20 }, () => new FloatingText());
+            fallingItems = Array.from({ length: MAX_ITEMS }, () => new FallingItem());
+            projectiles = Array.from({ length: MAX_PROJECTILES }, () => new Projectile());
+        }
+
+        function spawnParticles(x, y, color, count = 5) {
+            for (let i = 0; i < count; i++) {
+                const p = particles.find(p => !p.active);
+                if (p) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 1 + Math.random() * 4;
+                    p.spawn(x, y, color, 2 + Math.random() * 3, Math.cos(angle) * speed, Math.sin(angle) * speed, 20 + Math.random() * 15);
+                }
+            }
+        }
+
+        function spawnFloatingText(x, y, text, color) {
+            const ft = floatingTexts.find(f => !f.active);
+            if (ft) ft.spawn(x, y, text, color);
+        }
+
+        function spawnItem() {
+            const item = fallingItems.find(i => !i.active);
+            if (item) {
+                const x = 50 + Math.random() * (CANVAS_WIDTH - 100);
+                
+                // Acceleration progressive avec le temps
+                const timeFactor = state.gameTime / 1800; // +1.0 toutes les 30 secondes
+                
+                // Augmentation sans limite du taux de bombes
+                const bombProbability = Math.min(0.15 + timeFactor * 0.12, 0.85); 
+                
+                const rand = Math.random();
+                let type = 'FRUIT_APPLE';
+
+                if (rand < bombProbability) {
+                    type = 'BOMB';
+                } else {
+                    const subRand = Math.random();
+                    if (subRand < 0.30) type = 'FRUIT_APPLE';
+                    else if (subRand < 0.55) type = 'FRUIT_BANANA';
+                    else if (subRand < 0.75) type = 'FRUIT_MELON';
+                    else {
+                        const pwrRand = Math.random();
+                        if (pwrRand < 0.25) type = 'PWR_BURST';
+                        else if (pwrRand < 0.50) type = 'PWR_MULTI';
+                        else if (pwrRand < 0.75) type = 'PWR_SHIELD';
+                        else type = 'PWR_MAGNET';
+                    }
+                }
+
+                item.spawn(x, type);
+
+                // Vitesse MAXIMALE réduite à 5 px/frame
+                const calculatedSpeed = item.vy + timeFactor * 1.5;
+                item.vy = Math.min(5, calculatedSpeed);
+            }
+        }
+
+        // --- CORE GAME LOGIC ---
+        function resetGame() {
+            state.score = 0;
+            state.coins = 0;
+            state.combo = 1;
+            state.maxCombo = 1;
+            state.hp = 3;
+            state.ammoQueue = ['🍎', '🍌', '🍎'];
+            state.gameOver = false;
+            state.gameStarted = true;
+            state.powerup = null;
+            state.powerups = { BURST: 0, MULTI: 0, SHIELD: 0, MAGNET: 0 };
+            state.bossHp = 100;
+            state.bossX = CANVAS_WIDTH / 2;
+            state.gameTime = 0;
+            state.usedAdLife = false; // Reset 1-life ad usage flag
+            state.usedAdCoins = false; // Reset 500-coins ad usage flag
+            lastItemSpawn = performance.now();
+
+            // Re-enable ad button UI
+            const adHpBtn = document.getElementById('btn-ad-hp');
+            if (adHpBtn) {
+                adHpBtn.style.opacity = '1';
+                adHpBtn.style.pointerEvents = 'auto';
+            }
+            const adCoinsBtn = document.getElementById('btn-ad-coins');
+            if (adCoinsBtn) {
+                adCoinsBtn.style.opacity = '1';
+                adCoinsBtn.style.pointerEvents = 'auto';
+            }
+
+            fallingItems.forEach(i => i.active = false);
+            projectiles.forEach(p => p.active = false);
+            particles.forEach(p => p.draw ? (p.active = false) : null);
+            floatingTexts.forEach(f => f.draw ? (f.active = false) : null);
+
+            document.getElementById('start-overlay').classList.remove('active');
+            document.getElementById('gameover-overlay').classList.remove('active');
+            document.getElementById('shop-overlay').classList.remove('active');
+            document.getElementById('leaderboard-overlay').classList.remove('active');
+            document.getElementById('ad-modal-overlay').classList.remove('active');
+        }
+
+        function showHomeMenu() {
+            state.gameStarted = false;
+            state.gameOver = false;
+            document.getElementById('gameover-overlay').classList.remove('active');
+            document.getElementById('shop-overlay').classList.remove('active');
+            document.getElementById('leaderboard-overlay').classList.remove('active');
+            document.getElementById('ad-modal-overlay').classList.remove('active');
+            document.getElementById('start-overlay').classList.add('active');
+        }
+
+        let currentShotId = 0;
+
+        function launchProjectile(targetX, targetY) {
+            if (state.ammoQueue.length === 0) return;
+
+            sound.launch();
+            currentShotId++;
+            currentShotHit = false; // Reset hit flag for the new shot wave
+
+            const dx = targetX - catapult.x;
+            const dy = targetY - catapult.y;
+            const dist = Math.hypot(dx, dy) || 1;
+
+            const speed = 14;
+            const vx = (dx / dist) * speed;
+            const vy = (dy / dist) * speed;
+
+            // Pick the next fruit from ammo queue
+            const currentFruit = state.ammoQueue.shift();
+
+            // Stackable power-up execution (can combine MULTI and BURST simultaneously!)
+            const isMulti = state.powerups.MULTI > 0;
+            const isBurst = state.powerups.BURST > 0;
+
+            const fireWave = (vX, vY, delay = 0) => {
+                setTimeout(() => {
+                    if (isMulti) {
+                        const angles = [-0.25, 0, 0.25];
+                        angles.forEach(ang => {
+                            const cos = Math.cos(ang);
+                            const sin = Math.sin(ang);
+                            const rx = vX * cos - vY * sin;
+                            const ry = vX * sin + vY * cos;
+                            const proj = projectiles.find(p => !p.active);
+                            if (proj) proj.spawn(catapult.x, catapult.y - 30, rx, ry, currentFruit || '🔱', currentShotId);
+                        });
+                    } else {
+                        const proj = projectiles.find(p => !p.active);
+                        if (proj) proj.spawn(catapult.x, catapult.y - 30, vX, vY, currentFruit, currentShotId);
+                    }
+                }, delay);
+            };
+
+            if (isBurst) {
+                for (let i = 0; i < 3; i++) {
+                    fireWave(vx * (1 + i * 0.08), vy * (1 + i * 0.08), i * 90);
+                }
+            } else {
+                fireWave(vx, vy, 0);
+            }
+        }
+
+        function handleCollisions() {
+            // 1. Catapult Catch Mechanics (Physical collision with falling items)
+            fallingItems.forEach(item => {
+                if (!item.active) return;
+
+                const dx = item.x - catapult.x;
+                const dy = item.y - catapult.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist < item.radius + 30) {
+                    item.active = false;
+
+                    if (item.type === 'BOMB') {
+                        if (state.powerups.SHIELD > 0) {
+                            state.powerups.SHIELD = 0;
+                            sound.hit();
+                            spawnFloatingText(catapult.x, catapult.y - 40, '🛡️ BREAK!', '#38bdf8');
+                        } else {
+                            state.hp--;
+                            state.shake = 15;
+                            sound.explosion();
+                            spawnParticles(catapult.x, catapult.y, '#ef4444', 20);
+                            spawnFloatingText(catapult.x, catapult.y - 40, '-💖', '#ef4444');
+                            if (state.hp <= 0) triggerGameOver();
+                        }
+                    } else if (item.type.startsWith('PWR_')) {
+                        sound.powerup();
+                        // Stackable timer extension (adds or resets 12s per powerup)
+                        if (item.type === 'PWR_BURST') state.powerups.BURST = 720;
+                        if (item.type === 'PWR_MULTI') state.powerups.MULTI = 720;
+                        if (item.type === 'PWR_SHIELD') state.powerups.SHIELD = 720;
+                        if (item.type === 'PWR_MAGNET') state.powerups.MAGNET = 720;
+                        
+                        spawnFloatingText(catapult.x, catapult.y - 40, item.symbol, '#facc15');
+                    } else {
+                        // Harvested Fruits added to Queue in order!
+                        sound.catch();
+                        if (state.ammoQueue.length < 10) {
+                            state.ammoQueue.push(item.symbol);
+                        }
+                        state.coins += 10;
+                        state.score += 50;
+                        spawnParticles(item.x, item.y, '#22c55e', 8);
+                        spawnFloatingText(item.x, item.y, `+${item.symbol}`, '#facc15');
+                    }
+                }
+            });
+
+            // 2. Projectiles hitting Boss Monster (Increases Combo Multiplier!)
+            projectiles.forEach(proj => {
+                if (!proj.active) return;
+
+                const dx = proj.x - state.bossX;
+                const dy = proj.y - 80;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist < 45) {
+                    proj.active = false;
+                    sound.hit();
+                    
+                    // Increment Combo only once per hit (or per projectile) & mark shot as successful
+                    if (!currentShotHit) {
+                        currentShotHit = true;
+                        state.combo++;
+                        if (state.combo > state.maxCombo) state.maxCombo = state.combo;
+                    }
+
+                    // Coins Multiplied by Combo
+                    const gainedCoins = 25 * state.combo;
+                    const gainedScore = 100 * state.combo;
+
+                    state.bossHp = Math.max(0, state.bossHp - 5);
+                    state.score += gainedScore;
+                    state.coins += gainedCoins;
+                    
+                    spawnParticles(proj.x, proj.y, '#f59e0b', 12);
+                    spawnFloatingText(proj.x, proj.y, `🔥 x${state.combo} (+🪙${gainedCoins})`, '#facc15');
+
+                    // Respawn/Reset Boss HP on defeat
+                    if (state.bossHp <= 0) {
+                        state.score += 1000 * state.combo;
+                        state.coins += 200 * state.combo;
+                        state.bossHp = state.bossMaxHp;
+                        spawnFloatingText(state.bossX, 80, `👑 MAX BONUS! x${state.combo}`, '#facc15');
+                    }
+                }
+            });
+        }
+
+        function triggerGameOver() {
+            state.gameOver = true;
+            // Record final score in localstorage only when game actually ends (not saved during +1 life continuation)
+            saveScore(state.username, state.score);
+            document.getElementById('final-score').innerText = `🪙 ${state.coins}`;
+            document.getElementById('gameover-overlay').classList.add('active');
+        }
+
+        // --- AD POPUP CONTROLLER ---
+        function playAdPopup(onReward) {
+            const adOverlay = document.getElementById('ad-modal-overlay');
+            const skipBtn = document.getElementById('ad-skip-btn');
+            
+            adOverlay.classList.add('active');
+            skipBtn.classList.add('disabled');
+            
+            let countdown = 5;
+            skipBtn.innerText = `⏳ ${countdown}s`;
+
+            const timer = setInterval(() => {
+                countdown--;
+                if (countdown > 0) {
+                    skipBtn.innerText = `⏳ ${countdown}s`;
+                } else {
+                    clearInterval(timer);
+                    skipBtn.innerText = `❌ SKIP`;
+                    skipBtn.classList.remove('disabled');
+                }
+            }, 1000);
+
+            skipBtn.onclick = () => {
+                if (countdown <= 0) {
+                    adOverlay.classList.remove('active');
+                    if (onReward) onReward();
+                }
+            };
+        }
+
+        // --- EVENT LISTENERS & SETUP ---
+        function setupEvents() {
+            const canvas = document.getElementById('gameCanvas');
+
+            // Keyboard Controls (Q/D or Left/Right Arrows)
+            window.addEventListener('keydown', e => {
+                sound.init();
+                if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') keys.left = true;
+                if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = true;
+            });
+
+            window.addEventListener('keyup', e => {
+                if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') keys.left = false;
+                if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = false;
+            });
+
+            // On-screen touch buttons for horizontal movement
+            const btnLeft = document.getElementById('btn-left');
+            const btnRight = document.getElementById('btn-right');
+
+            const bindTouch = (elem, key) => {
+                elem.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; sound.init(); });
+                elem.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
+                elem.addEventListener('mousedown', () => { keys[key] = true; sound.init(); });
+                elem.addEventListener('mouseup', () => { keys[key] = false; });
+            };
+            bindTouch(btnLeft, 'left');
+            bindTouch(btnRight, 'right');
+
+            // Drag-to-Aim Mouse / Touch Controls
+            const getCanvasCoords = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * (CANVAS_WIDTH / rect.width),
+                    y: (clientY - rect.top) * (CANVAS_HEIGHT / rect.height)
+                };
+            };
+
+            const startDrag = (e) => {
+                if (!state.gameStarted || state.gameOver) return;
+                sound.init();
+                const coords = getCanvasCoords(e);
+                // Check if top-right shop button was clicked
+                if (coords.x > CANVAS_WIDTH - 60 && coords.y < 60) {
+                    document.getElementById('shop-overlay').classList.add('active');
+                    return;
+                }
+                mouse.isDragging = true;
+                mouse.x = coords.x;
+                mouse.y = coords.y;
+            };
+
+            const moveDrag = (e) => {
+                if (!mouse.isDragging) return;
+                const coords = getCanvasCoords(e);
+                mouse.x = coords.x;
+                mouse.y = coords.y;
+            };
+
+            const endDrag = (e) => {
+                if (mouse.isDragging) {
+                    mouse.isDragging = false;
+                    launchProjectile(mouse.x, mouse.y);
+                }
+            };
+
+            canvas.addEventListener('mousedown', startDrag);
+            canvas.addEventListener('mousemove', moveDrag);
+            window.addEventListener('mouseup', endDrag);
+
+            canvas.addEventListener('touchstart', startDrag, { passive: false });
+            canvas.addEventListener('touchmove', moveDrag, { passive: false });
+            window.addEventListener('touchend', endDrag);
+
+            // --- UI BUTTON HANDLERS ---
+            document.getElementById('btn-start').onclick = () => {
+                const inputVal = document.getElementById('username-input').value.trim();
+                state.username = inputVal || 'Player';
+                resetGame();
+            };
+
+            document.getElementById('btn-show-lb').onclick = () => {
+                renderLeaderboard();
+                document.getElementById('leaderboard-overlay').classList.add('active');
+            };
+            document.getElementById('close-lb').onclick = (e) => {
+                if (e) e.stopPropagation();
+                document.getElementById('leaderboard-overlay').classList.remove('active');
+            };
+
+            document.getElementById('btn-go-lb').onclick = (e) => {
+                if (e) e.stopPropagation();
+                renderLeaderboard();
+                document.getElementById('leaderboard-overlay').classList.add('active');
+            };
+
+            document.getElementById('btn-restart').onclick = () => {
+                resetGame();
+            };
+
+            document.getElementById('btn-home').onclick = () => {
+                showHomeMenu();
+            };
+            document.getElementById('close-shop').onclick = () => {
+                document.getElementById('shop-overlay').classList.remove('active');
+            };
+
+            // --- MONETIZATION ADS WITH 5-SECOND SKIP TIMER ---
+            
+            // 1. +1 HP Ad Option (Single Use per game session, gives shield & resumes)
+            document.getElementById('btn-ad-hp').onclick = () => {
+                if (state.usedAdLife) return;
+                playAdPopup(() => {
+                    state.usedAdLife = true;
+                    state.hp = 1;
+                    state.powerups.SHIELD = 720;
+                    state.gameOver = false;
+                    document.getElementById('gameover-overlay').classList.remove('active');
+                    
+                    const adHpBtn = document.getElementById('btn-ad-hp');
+                    if (adHpBtn) {
+                        adHpBtn.style.opacity = '0.4';
+                        adHpBtn.style.pointerEvents = 'none';
+                    }
+                });
+            };
+
+            // 2. +500 Coins Ad Option (Single Use per game session, rewards without restarting)
+            document.getElementById('btn-ad-coins').onclick = () => {
+                if (state.usedAdCoins) return;
+                playAdPopup(() => {
+                    state.usedAdCoins = true;
+                    state.coins += 500;
+                    document.getElementById('final-score').innerText = `🪙 ${state.coins}`;
+                    
+                    const adCoinsBtn = document.getElementById('btn-ad-coins');
+                    if (adCoinsBtn) {
+                        adCoinsBtn.style.opacity = '0.4';
+                        adCoinsBtn.style.pointerEvents = 'none';
+                    }
+                });
+            };
+
+            // Shop purchasing buttons
+            document.getElementById('buy-hp').onclick = () => {
+                if (state.coins >= 500 && state.hp < state.maxHp) {
+                    state.coins -= 500;
+                    state.hp++;
+                    sound.powerup();
+                }
+            };
+            document.getElementById('buy-burst').onclick = () => {
+                if (state.coins >= 300) {
+                    state.coins -= 300;
+                    state.powerups.BURST = 720;
+                    sound.powerup();
+                }
+            };
+            document.getElementById('buy-multi').onclick = () => {
+                if (state.coins >= 400) {
+                    state.coins -= 400;
+                    state.powerups.MULTI = 720;
+                    sound.powerup();
+                }
+            };
+            document.getElementById('buy-shield').onclick = () => {
+                if (state.coins >= 250) {
+                    state.coins -= 250;
+                    state.powerups.SHIELD = 720;
+                    sound.powerup();
+                }
+            };
+        }
+
+        // --- UPDATE & RENDER LOOP ---
+        function update(now) {
+            if (!state.gameStarted || state.gameOver) return;
+
+            state.gameTime++;
+
+            // Handle Stackable Powerup Timers Decay
+            for (const pwr in state.powerups) {
+                if (state.powerups[pwr] > 0) {
+                    state.powerups[pwr]--;
+                }
+            }
+
+            // Screen Shake Decay
+            if (state.shake > 0) state.shake *= 0.9;
+
+            // Catapult Update
+            catapult.update();
+
+            // Dynamic Continuous Spawning (Progression fluide calculée en secondes réelles)
+            const secondsElapsed = state.gameTime / 60; // 60 frames = 1 seconde
+            
+            // Le délai d'apparition diminue progressivement (ex: 1200ms au début, puis plus rapide au fil des minutes)
+            const spawnDelay = Math.max(120, 1400 - secondsElapsed * 15);
+            
+            if (now - lastItemSpawn > spawnDelay) {
+                lastItemSpawn = now;
+                
+                // Le nombre d'objets simultanés augmente de 1 toutes les 45 secondes de survie
+                const waveCount = 1 + Math.floor(secondsElapsed / 45);
+                for (let i = 0; i < waveCount; i++) {
+                    spawnItem();
+                }
+            }
+
+            // Boss Horizontal Oscillating Movement
+            state.bossX += state.bossDirection * 2.5;
+            if (state.bossX < 100 || state.bossX > CANVAS_WIDTH - 100) {
+                state.bossDirection *= -1;
+            }
+
+            // Update Entities
+            fallingItems.forEach(i => i.update());
+            projectiles.forEach(p => p.update());
+            particles.forEach(p => p.update());
+            floatingTexts.forEach(f => f.update());
+
+            handleCollisions();
+        }
+
+        function draw(ctx) {
+            ctx.save();
+
+            // Screen Shake Effect
+            if (state.shake > 0.5) {
+                ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
+            }
+
+            // Sky Background Gradient
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+            skyGrad.addColorStop(0, '#0f172a');
+            skyGrad.addColorStop(1, '#1e293b');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // Ground Floor
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, CANVAS_HEIGHT - GROUND_Y);
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, 6);
+
+            // Boss Monster at the Top
+            ctx.save();
+            ctx.translate(state.bossX, 80);
+            ctx.font = '64px serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('👾', 0, 0);
+
+            // Boss Health Bar
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+            ctx.fillRect(-50, -50, 100, 10);
+            ctx.fillStyle = '#ef4444';
+            ctx.fillRect(-50, -50, (state.bossHp / state.bossMaxHp) * 100, 10);
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-50, -50, 100, 10);
+            ctx.restore();
+
+            // Draw Trajectory Line when Aiming/Dragging
+            if (mouse.isDragging) {
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([8, 8]);
+                ctx.beginPath();
+                ctx.moveTo(catapult.x, catapult.y - 30);
+                ctx.lineTo(mouse.x, mouse.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Draw Entities
+            fallingItems.forEach(i => i.draw(ctx));
+            projectiles.forEach(p => p.draw(ctx));
+            catapult.draw(ctx);
+            particles.forEach(p => p.draw(ctx));
+            floatingTexts.forEach(f => f.draw(ctx));
+
+            // --- HUD (Heads-Up Display) ---
+            // HP Hearts
+            let hearts = '';
+            for (let i = 0; i < state.hp; i++) hearts += '💖';
+            ctx.font = '24px serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(hearts, 20, 35);
+
+            // Score & Coins
+            ctx.font = 'bold 20px system-ui';
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillText(`🏆 ${state.score}`, 160, 35);
+            ctx.fillStyle = '#facc15';
+            ctx.fillText(`🪙 ${state.coins}`, 290, 35);
+
+            // Next Ammo Queue Display moved to Top HUD Bar
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+            ctx.roundRect ? ctx.roundRect(400, 10, 200, 38, 10) : ctx.fillRect(400, 10, 200, 38);
+            ctx.fill();
+            ctx.font = 'bold 14px system-ui';
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText('NEXT:', 410, 34);
+
+            ctx.font = '20px serif';
+            state.ammoQueue.slice(0, 4).forEach((symbol, index) => {
+                ctx.fillText(symbol, 465 + index * 30, 34);
+            });
+
+            // Active Stackable Powerups Display
+            let activePwrX = 620;
+            for (const pwr in state.powerups) {
+                if (state.powerups[pwr] > 0) {
+                    const icon = pwr === 'BURST' ? '⚡' : pwr === 'MULTI' ? '🔱' : pwr === 'SHIELD' ? '🛡️' : '🧲';
+                    const secs = Math.ceil(state.powerups[pwr] / 60);
+                    ctx.font = 'bold 16px system-ui';
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.fillText(`${icon}${secs}s`, activePwrX, 35);
+                    activePwrX += 65;
+                }
+            }
+
+            // Active Combo Display
+            if (state.combo > 1) {
+                ctx.fillStyle = '#ef4444';
+                ctx.font = 'bold 22px system-ui';
+                ctx.fillText(`🔥x${state.combo}`, activePwrX, 35);
+            }
+
+            // Shop Shortcut Button (Top Right 🛒)
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+            ctx.beginPath();
+            ctx.arc(CANVAS_WIDTH - 35, 35, 22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.font = '22px serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🛒', CANVAS_WIDTH - 35, 36);
+
+            ctx.restore();
+        }
+
+        // --- MAIN GAME LOOP ---
+        function gameLoop(now) {
+            update(now);
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            draw(ctx);
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = () => {
+            initPools();
+            catapult = new Catapult();
+            setupEvents();
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
