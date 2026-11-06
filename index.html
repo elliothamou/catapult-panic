@@ -334,37 +334,11 @@
             </div>
         </div>
 
-        <!-- Shop Modal -->
-        <div id="shop-overlay" class="overlay">
-            <div class="modal">
-                <div class="modal-title">🛒</div>
-                <div class="shop-grid">
-                    <div class="shop-item">
-                        <span class="shop-item-icon">💖</span>
-                        <button class="btn btn-green" id="buy-hp">🪙 500</button>
-                    </div>
-                    <div class="shop-item">
-                        <span class="shop-item-icon">⚡</span>
-                        <button class="btn btn-green" id="buy-burst">🪙 300</button>
-                    </div>
-                    <div class="shop-item">
-                        <span class="shop-item-icon">🔱</span>
-                        <button class="btn btn-green" id="buy-multi">🪙 400</button>
-                    </div>
-                    <div class="shop-item">
-                        <span class="shop-item-icon">🛡️</span>
-                        <button class="btn btn-green" id="buy-shield">🪙 250</button>
-                    </div>
-                </div>
-                <button class="btn" id="close-shop">❌</button>
-            </div>
-        </div>
-
         <!-- Game Over Modal -->
         <div id="gameover-overlay" class="overlay">
             <div class="modal">
-                <div class="modal-title">💀</div>
-                <div style="font-size: 2.5rem; font-weight: bold; color: #facc15;" id="final-score">🪙 0</div>
+                <div class="modal-title">💀 GAME OVER</div>
+                <div style="font-size: 2.5rem; font-weight: bold; color: #facc15;" id="final-score">🏆 0</div>
                 <div class="btn-group">
                     <button class="btn" id="btn-restart">🔄</button>
                     <button class="btn" id="btn-home">🏠</button>
@@ -372,7 +346,6 @@
                 </div>
                 <div class="btn-group">
                     <button class="btn btn-ad" id="btn-ad-hp">🎬 +1 💖</button>
-                    <button class="btn btn-ad" id="btn-ad-coins">🎬 +🪙500</button>
                 </div>
             </div>
         </div>
@@ -439,7 +412,6 @@
         const state = {
             username: 'Player',
             score: 0,
-            coins: 0,
             combo: 1, // Multiplicateur de combo
             maxCombo: 1,
             hp: 3,
@@ -448,8 +420,8 @@
             gameOver: false,
             gameStarted: false,
             paused: false,
-            powerup: null, // Legacy reference for simple checks
-            powerups: {    // Stackable active power-up timers (720 frames = 12s)
+            powerup: null,
+            powerups: {    // Stackable active power-up timers
                 BURST: 0,
                 MULTI: 0,
                 SHIELD: 0,
@@ -460,9 +432,8 @@
             bossMaxHp: 100,
             bossDirection: 1,
             bossX: CANVAS_WIDTH / 2,
-            gameTime: 0, // Game survival time for progressive difficulty
-            usedAdLife: false, // Track if +1 HP ad was already used this run
-            usedAdCoins: false // Track if +500 Coins ad was already used this run
+            gameTime: 0,
+            usedAdLife: false
         };
 
         // Inputs
@@ -475,12 +446,12 @@
         let fallingItems = [];
         let particles = [];
         let floatingTexts = [];
-        let lastItemSpawn = 0; // Fix: Déclaration globale de lastItemSpawn
-        let currentShotHit = false; // Tracks if the current shot wave hit the monster
+        let lastItemSpawn = 0;
+        let currentShotHit = false;
 
         // Pool limits for high performance
         const MAX_PROJECTILES = 40;
-        const MAX_ITEMS = 25;
+        const MAX_ITEMS = 35;
         const MAX_PARTICLES = 100;
 
         // --- LEADERBOARD LOGIC ---
@@ -513,7 +484,7 @@
             listContainer.innerHTML = lb.map((entry, index) => `
                 <div class="leaderboard-item">
                     <span>#${index + 1} ${entry.name}</span>
-                    <span>🪙 ${entry.score}</span>
+                    <span>🏆 ${entry.score}</span>
                 </div>
             `).join('');
         }
@@ -580,8 +551,8 @@
                 this.x = x;
                 this.y = -30;
                 this.type = type;
-                this.vy = 2 + Math.random() * 2;
-                this.vx = (Math.random() - 0.5) * 1.5;
+                this.vy = 1.0 + Math.random() * 0.8;
+                this.vx = (Math.random() - 0.5) * 1.0;
                 this.radius = 20;
                 this.active = true;
                 this.symbol = this.getSymbol(type);
@@ -604,21 +575,18 @@
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // Magnet effect towards Catapult (checks stackable magnet timer)
                 if (state.powerups.MAGNET > 0 && this.type !== 'BOMB') {
                     const dx = catapult.x - this.x;
                     const dy = catapult.y - this.y;
                     const dist = Math.hypot(dx, dy);
                     if (dist < 250) {
-                        this.vx += (dx / dist) * 0.5;
-                        this.vy += (dy / dist) * 0.5;
+                        this.vx += (dx / dist) * 0.4;
+                        this.vy += (dy / dist) * 0.4;
                     }
                 }
 
-                // Bounce walls
                 if (this.x < 20 || this.x > CANVAS_WIDTH - 20) this.vx *= -1;
 
-                // Hit Ground (item disappears without penalty)
                 if (this.y > GROUND_Y + 10) {
                     this.active = false;
                 }
@@ -642,18 +610,16 @@
                 this.radius = 16;
                 this.symbol = symbol;
                 this.bounces = 0;
-                this.shotId = shotId; // Unique identifier for the shot wave
+                this.shotId = shotId;
                 this.active = true;
             }
             update() {
                 if (!this.active) return;
 
-                // Apply Gravity & Velocity
                 this.vy += 0.25;
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // Wall Rebounds (Left / Right)
                 if (this.x - this.radius <= 0) {
                     this.x = this.radius;
                     this.vx *= -0.85;
@@ -666,13 +632,10 @@
                     spawnParticles(this.x, this.y, '#38bdf8', 5);
                 }
 
-                // Hit Ground Boundary - Destroys Projectile & checks if shot missed
                 if (this.y + this.radius >= GROUND_Y) {
                     this.active = false;
                     spawnParticles(this.x, GROUND_Y, '#94a3b8', 8);
                     
-                    // Reset combo ONLY if no projectile from the active shot wave hit the monster
-                    // and no other active projectiles belong to the same shot
                     const otherActiveSameShot = projectiles.some(p => p.active && p.shotId === this.shotId);
                     if (!currentShotHit && !otherActiveSameShot && state.combo > 1) {
                         spawnFloatingText(this.x, GROUND_Y - 20, '❌ COMBO RESET', '#ef4444');
@@ -695,20 +658,18 @@
                 this.y = GROUND_Y - 15;
                 this.width = 70;
                 this.height = 35;
-                this.speed = 4.5; // Vitesse de la catapulte réduite (au lieu de 7)
+                this.speed = 5.0;
             }
             update() {
                 if (keys.left) this.x -= this.speed;
                 if (keys.right) this.x += this.speed;
 
-                // Clamp to screen bounds
                 this.x = Math.max(this.width / 2, Math.min(CANVAS_WIDTH - this.width / 2, this.x));
             }
             draw(ctx) {
                 ctx.save();
                 ctx.translate(this.x, this.y);
 
-                // Shield Aura Visual (checks stackable shield timer)
                 if (state.powerups.SHIELD > 0) {
                     ctx.strokeStyle = '#38bdf8';
                     ctx.lineWidth = 4;
@@ -717,25 +678,21 @@
                     ctx.stroke();
                 }
 
-                // Base / Wheels
                 ctx.fillStyle = '#64748b';
                 ctx.beginPath();
                 ctx.arc(-20, 15, 10, 0, Math.PI * 2);
                 ctx.arc(20, 15, 10, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Body Frame
                 ctx.fillStyle = '#78350f';
                 ctx.fillRect(-this.width / 2, -5, this.width, 20);
 
-                // Cup / Launcher Arm
                 ctx.fillStyle = '#b45309';
                 ctx.fillRect(-6, -25, 12, 25);
                 ctx.beginPath();
                 ctx.arc(0, -25, 16, Math.PI, 0);
                 ctx.fill();
 
-                // Next Loaded Item Display
                 if (state.ammoQueue.length > 0) {
                     ctx.font = '20px serif';
                     ctx.textAlign = 'center';
@@ -778,12 +735,8 @@
             const item = fallingItems.find(i => !i.active);
             if (item) {
                 const x = 50 + Math.random() * (CANVAS_WIDTH - 100);
-                
-                // Acceleration progressive avec le temps
-                const timeFactor = state.gameTime / 1800; // +1.0 toutes les 30 secondes
-                
-                // Augmentation sans limite du taux de bombes
-                const bombProbability = Math.min(0.15 + timeFactor * 0.12, 0.85); 
+                const timeFactor = state.gameTime / 3600; 
+                const bombProbability = Math.min(0.10 + timeFactor * 0.10, 0.75); 
                 
                 const rand = Math.random();
                 let type = 'FRUIT_APPLE';
@@ -806,16 +759,14 @@
 
                 item.spawn(x, type);
 
-                // Vitesse MAXIMALE réduite à 5 px/frame
-                const calculatedSpeed = item.vy + timeFactor * 1.5;
-                item.vy = Math.min(5, calculatedSpeed);
+                const calculatedSpeed = item.vy + timeFactor * 0.6;
+                item.vy = Math.min(3.2, calculatedSpeed);
             }
         }
 
         // --- CORE GAME LOGIC ---
         function resetGame() {
             state.score = 0;
-            state.coins = 0;
             state.combo = 1;
             state.maxCombo = 1;
             state.hp = 3;
@@ -827,20 +778,13 @@
             state.bossHp = 100;
             state.bossX = CANVAS_WIDTH / 2;
             state.gameTime = 0;
-            state.usedAdLife = false; // Reset 1-life ad usage flag
-            state.usedAdCoins = false; // Reset 500-coins ad usage flag
+            state.usedAdLife = false;
             lastItemSpawn = performance.now();
 
-            // Re-enable ad button UI
             const adHpBtn = document.getElementById('btn-ad-hp');
             if (adHpBtn) {
                 adHpBtn.style.opacity = '1';
                 adHpBtn.style.pointerEvents = 'auto';
-            }
-            const adCoinsBtn = document.getElementById('btn-ad-coins');
-            if (adCoinsBtn) {
-                adCoinsBtn.style.opacity = '1';
-                adCoinsBtn.style.pointerEvents = 'auto';
             }
 
             fallingItems.forEach(i => i.active = false);
@@ -850,7 +794,6 @@
 
             document.getElementById('start-overlay').classList.remove('active');
             document.getElementById('gameover-overlay').classList.remove('active');
-            document.getElementById('shop-overlay').classList.remove('active');
             document.getElementById('leaderboard-overlay').classList.remove('active');
             document.getElementById('ad-modal-overlay').classList.remove('active');
         }
@@ -859,7 +802,6 @@
             state.gameStarted = false;
             state.gameOver = false;
             document.getElementById('gameover-overlay').classList.remove('active');
-            document.getElementById('shop-overlay').classList.remove('active');
             document.getElementById('leaderboard-overlay').classList.remove('active');
             document.getElementById('ad-modal-overlay').classList.remove('active');
             document.getElementById('start-overlay').classList.add('active');
@@ -872,7 +814,7 @@
 
             sound.launch();
             currentShotId++;
-            currentShotHit = false; // Reset hit flag for the new shot wave
+            currentShotHit = false;
 
             const dx = targetX - catapult.x;
             const dy = targetY - catapult.y;
@@ -882,10 +824,8 @@
             const vx = (dx / dist) * speed;
             const vy = (dy / dist) * speed;
 
-            // Pick the next fruit from ammo queue
             const currentFruit = state.ammoQueue.shift();
 
-            // Stackable power-up execution (can combine MULTI and BURST simultaneously!)
             const isMulti = state.powerups.MULTI > 0;
             const isBurst = state.powerups.BURST > 0;
 
@@ -918,7 +858,7 @@
         }
 
         function handleCollisions() {
-            // 1. Catapult Catch Mechanics (Physical collision with falling items)
+            // 1. Catapult Catch Mechanics
             fallingItems.forEach(item => {
                 if (!item.active) return;
 
@@ -944,7 +884,6 @@
                         }
                     } else if (item.type.startsWith('PWR_')) {
                         sound.powerup();
-                        // Stackable timer extension (adds or resets 12s per powerup)
                         if (item.type === 'PWR_BURST') state.powerups.BURST = 720;
                         if (item.type === 'PWR_MULTI') state.powerups.MULTI = 720;
                         if (item.type === 'PWR_SHIELD') state.powerups.SHIELD = 720;
@@ -952,12 +891,10 @@
                         
                         spawnFloatingText(catapult.x, catapult.y - 40, item.symbol, '#facc15');
                     } else {
-                        // Harvested Fruits added to Queue in order!
                         sound.catch();
                         if (state.ammoQueue.length < 10) {
                             state.ammoQueue.push(item.symbol);
                         }
-                        state.coins += 10;
                         state.score += 50;
                         spawnParticles(item.x, item.y, '#22c55e', 8);
                         spawnFloatingText(item.x, item.y, `+${item.symbol}`, '#facc15');
@@ -965,7 +902,7 @@
                 }
             });
 
-            // 2. Projectiles hitting Boss Monster (Increases Combo Multiplier!)
+            // 2. Projectiles hitting Boss Monster
             projectiles.forEach(proj => {
                 if (!proj.active) return;
 
@@ -977,28 +914,22 @@
                     proj.active = false;
                     sound.hit();
                     
-                    // Increment Combo only once per hit (or per projectile) & mark shot as successful
                     if (!currentShotHit) {
                         currentShotHit = true;
                         state.combo++;
                         if (state.combo > state.maxCombo) state.maxCombo = state.combo;
                     }
 
-                    // Coins Multiplied by Combo
-                    const gainedCoins = 25 * state.combo;
                     const gainedScore = 100 * state.combo;
 
                     state.bossHp = Math.max(0, state.bossHp - 5);
                     state.score += gainedScore;
-                    state.coins += gainedCoins;
                     
                     spawnParticles(proj.x, proj.y, '#f59e0b', 12);
-                    spawnFloatingText(proj.x, proj.y, `🔥 x${state.combo} (+🪙${gainedCoins})`, '#facc15');
+                    spawnFloatingText(proj.x, proj.y, `🔥 x${state.combo} (+🏆${gainedScore})`, '#facc15');
 
-                    // Respawn/Reset Boss HP on defeat
                     if (state.bossHp <= 0) {
                         state.score += 1000 * state.combo;
-                        state.coins += 200 * state.combo;
                         state.bossHp = state.bossMaxHp;
                         spawnFloatingText(state.bossX, 80, `👑 MAX BONUS! x${state.combo}`, '#facc15');
                     }
@@ -1008,9 +939,8 @@
 
         function triggerGameOver() {
             state.gameOver = true;
-            // Record final score in localstorage only when game actually ends (not saved during +1 life continuation)
             saveScore(state.username, state.score);
-            document.getElementById('final-score').innerText = `🪙 ${state.coins}`;
+            document.getElementById('final-score').innerText = `🏆 ${state.score}`;
             document.getElementById('gameover-overlay').classList.add('active');
         }
 
@@ -1048,7 +978,6 @@
         function setupEvents() {
             const canvas = document.getElementById('gameCanvas');
 
-            // Keyboard Controls (Q/D or Left/Right Arrows)
             window.addEventListener('keydown', e => {
                 sound.init();
                 if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') keys.left = true;
@@ -1060,7 +989,6 @@
                 if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = false;
             });
 
-            // On-screen touch buttons for horizontal movement
             const btnLeft = document.getElementById('btn-left');
             const btnRight = document.getElementById('btn-right');
 
@@ -1073,7 +1001,6 @@
             bindTouch(btnLeft, 'left');
             bindTouch(btnRight, 'right');
 
-            // Drag-to-Aim Mouse / Touch Controls
             const getCanvasCoords = (e) => {
                 const rect = canvas.getBoundingClientRect();
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -1088,11 +1015,6 @@
                 if (!state.gameStarted || state.gameOver) return;
                 sound.init();
                 const coords = getCanvasCoords(e);
-                // Check if top-right shop button was clicked
-                if (coords.x > CANVAS_WIDTH - 60 && coords.y < 60) {
-                    document.getElementById('shop-overlay').classList.add('active');
-                    return;
-                }
                 mouse.isDragging = true;
                 mouse.x = coords.x;
                 mouse.y = coords.y;
@@ -1149,13 +1071,8 @@
             document.getElementById('btn-home').onclick = () => {
                 showHomeMenu();
             };
-            document.getElementById('close-shop').onclick = () => {
-                document.getElementById('shop-overlay').classList.remove('active');
-            };
 
             // --- MONETIZATION ADS WITH 5-SECOND SKIP TIMER ---
-            
-            // 1. +1 HP Ad Option (Single Use per game session, gives shield & resumes)
             document.getElementById('btn-ad-hp').onclick = () => {
                 if (state.usedAdLife) return;
                 playAdPopup(() => {
@@ -1172,52 +1089,6 @@
                     }
                 });
             };
-
-            // 2. +500 Coins Ad Option (Single Use per game session, rewards without restarting)
-            document.getElementById('btn-ad-coins').onclick = () => {
-                if (state.usedAdCoins) return;
-                playAdPopup(() => {
-                    state.usedAdCoins = true;
-                    state.coins += 500;
-                    document.getElementById('final-score').innerText = `🪙 ${state.coins}`;
-                    
-                    const adCoinsBtn = document.getElementById('btn-ad-coins');
-                    if (adCoinsBtn) {
-                        adCoinsBtn.style.opacity = '0.4';
-                        adCoinsBtn.style.pointerEvents = 'none';
-                    }
-                });
-            };
-
-            // Shop purchasing buttons
-            document.getElementById('buy-hp').onclick = () => {
-                if (state.coins >= 500 && state.hp < state.maxHp) {
-                    state.coins -= 500;
-                    state.hp++;
-                    sound.powerup();
-                }
-            };
-            document.getElementById('buy-burst').onclick = () => {
-                if (state.coins >= 300) {
-                    state.coins -= 300;
-                    state.powerups.BURST = 720;
-                    sound.powerup();
-                }
-            };
-            document.getElementById('buy-multi').onclick = () => {
-                if (state.coins >= 400) {
-                    state.coins -= 400;
-                    state.powerups.MULTI = 720;
-                    sound.powerup();
-                }
-            };
-            document.getElementById('buy-shield').onclick = () => {
-                if (state.coins >= 250) {
-                    state.coins -= 250;
-                    state.powerups.SHIELD = 720;
-                    sound.powerup();
-                }
-            };
         }
 
         // --- UPDATE & RENDER LOOP ---
@@ -1226,42 +1097,32 @@
 
             state.gameTime++;
 
-            // Handle Stackable Powerup Timers Decay
             for (const pwr in state.powerups) {
                 if (state.powerups[pwr] > 0) {
                     state.powerups[pwr]--;
                 }
             }
 
-            // Screen Shake Decay
             if (state.shake > 0) state.shake *= 0.9;
 
-            // Catapult Update
             catapult.update();
 
-            // Dynamic Continuous Spawning (Progression fluide calculée en secondes réelles)
-            const secondsElapsed = state.gameTime / 60; // 60 frames = 1 seconde
-            
-            // Le délai d'apparition diminue progressivement (ex: 1200ms au début, puis plus rapide au fil des minutes)
-            const spawnDelay = Math.max(120, 1400 - secondsElapsed * 15);
+            const secondsElapsed = state.gameTime / 60;
+            const spawnDelay = Math.max(350, 2200 - secondsElapsed * 10);
             
             if (now - lastItemSpawn > spawnDelay) {
                 lastItemSpawn = now;
-                
-                // Le nombre d'objets simultanés augmente de 1 toutes les 45 secondes de survie
-                const waveCount = 1 + Math.floor(secondsElapsed / 45);
+                const waveCount = 1 + Math.floor(secondsElapsed / 75);
                 for (let i = 0; i < waveCount; i++) {
                     spawnItem();
                 }
             }
 
-            // Boss Horizontal Oscillating Movement
-            state.bossX += state.bossDirection * 2.5;
+            state.bossX += state.bossDirection * 1.5;
             if (state.bossX < 100 || state.bossX > CANVAS_WIDTH - 100) {
                 state.bossDirection *= -1;
             }
 
-            // Update Entities
             fallingItems.forEach(i => i.update());
             projectiles.forEach(p => p.update());
             particles.forEach(p => p.update());
@@ -1273,25 +1134,21 @@
         function draw(ctx) {
             ctx.save();
 
-            // Screen Shake Effect
             if (state.shake > 0.5) {
                 ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
             }
 
-            // Sky Background Gradient
             const skyGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
             skyGrad.addColorStop(0, '#0f172a');
             skyGrad.addColorStop(1, '#1e293b');
             ctx.fillStyle = skyGrad;
             ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-            // Ground Floor
             ctx.fillStyle = '#334155';
             ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, CANVAS_HEIGHT - GROUND_Y);
             ctx.fillStyle = '#475569';
             ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, 6);
 
-            // Boss Monster at the Top
             ctx.save();
             ctx.translate(state.bossX, 80);
             ctx.font = '64px serif';
@@ -1299,7 +1156,6 @@
             ctx.textBaseline = 'middle';
             ctx.fillText('👾', 0, 0);
 
-            // Boss Health Bar
             ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
             ctx.fillRect(-50, -50, 100, 10);
             ctx.fillStyle = '#ef4444';
@@ -1309,7 +1165,6 @@
             ctx.strokeRect(-50, -50, 100, 10);
             ctx.restore();
 
-            // Draw Trajectory Line when Aiming/Dragging
             if (mouse.isDragging) {
                 ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
                 ctx.lineWidth = 3;
@@ -1321,43 +1176,39 @@
                 ctx.setLineDash([]);
             }
 
-            // Draw Entities
             fallingItems.forEach(i => i.draw(ctx));
             projectiles.forEach(p => p.draw(ctx));
             catapult.draw(ctx);
             particles.forEach(p => p.draw(ctx));
             floatingTexts.forEach(f => f.draw(ctx));
 
-            // --- HUD (Heads-Up Display) ---
-            // HP Hearts
+            // --- HUD ---
             let hearts = '';
             for (let i = 0; i < state.hp; i++) hearts += '💖';
             ctx.font = '24px serif';
             ctx.textAlign = 'left';
             ctx.fillText(hearts, 20, 35);
 
-            // Score & Coins
+            // Score Display
             ctx.font = 'bold 20px system-ui';
             ctx.fillStyle = '#f8fafc';
             ctx.fillText(`🏆 ${state.score}`, 160, 35);
-            ctx.fillStyle = '#facc15';
-            ctx.fillText(`🪙 ${state.coins}`, 290, 35);
 
-            // Next Ammo Queue Display moved to Top HUD Bar
+            // Next Ammo Queue Display
             ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
-            ctx.roundRect ? ctx.roundRect(400, 10, 200, 38, 10) : ctx.fillRect(400, 10, 200, 38);
+            ctx.roundRect ? ctx.roundRect(300, 10, 200, 38, 10) : ctx.fillRect(300, 10, 200, 38);
             ctx.fill();
             ctx.font = 'bold 14px system-ui';
             ctx.fillStyle = '#94a3b8';
-            ctx.fillText('NEXT:', 410, 34);
+            ctx.fillText('NEXT:', 310, 34);
 
             ctx.font = '20px serif';
             state.ammoQueue.slice(0, 4).forEach((symbol, index) => {
-                ctx.fillText(symbol, 465 + index * 30, 34);
+                ctx.fillText(symbol, 365 + index * 30, 34);
             });
 
             // Active Stackable Powerups Display
-            let activePwrX = 620;
+            let activePwrX = 520;
             for (const pwr in state.powerups) {
                 if (state.powerups[pwr] > 0) {
                     const icon = pwr === 'BURST' ? '⚡' : pwr === 'MULTI' ? '🔱' : pwr === 'SHIELD' ? '🛡️' : '🧲';
@@ -1375,18 +1226,6 @@
                 ctx.font = 'bold 22px system-ui';
                 ctx.fillText(`🔥x${state.combo}`, activePwrX, 35);
             }
-
-            // Shop Shortcut Button (Top Right 🛒)
-            ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
-            ctx.beginPath();
-            ctx.arc(CANVAS_WIDTH - 35, 35, 22, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.font = '22px serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('🛒', CANVAS_WIDTH - 35, 36);
 
             ctx.restore();
         }
